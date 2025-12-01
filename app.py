@@ -125,13 +125,13 @@ if selected_tab == "📝 List":
             with col2:
                 if purchased:
                     # Toggle to Not Purchased
-                    if st.button("✅ Purchased", key=f"toggle_{idx}", help="Click to mark as not purchased"):
+                    if st.button("✅ To Purchase", key=f"toggle_{idx}", help="Click to mark as not purchased"):
                         df.loc[idx, "purchased"] = False # Updated column name
                         df.to_csv(DATA_FILE, index=False)
                         st.rerun()
                 else:
                     # Toggle to Purchased
-                    if st.button("❌ Not Yet Purchased", key=f"toggle_{idx}", help="Click to mark as purchased"):
+                    if st.button("❌ Complete", key=f"toggle_{idx}", help="Click to mark as purchased"):
                         df.loc[idx, "purchased"] = True # Updated column name
                         df.to_csv(DATA_FILE, index=False)
                         st.rerun()
