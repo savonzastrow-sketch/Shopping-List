@@ -1,60 +1,52 @@
 import streamlit as st
 import pandas as pd
 from pathlib import Path
-from datetime import datetime, date
-from zoneinfo import ZoneInfo
+from datetime import datetime
+# from zoneinfo import ZoneInfo # Not needed for Shopping List
 
 # -----------------------
 # CONFIG
 # -----------------------
-TIMEZONE = ZoneInfo("America/New_York")
+# TIMEZONE = ZoneInfo("America/New_York") # Not needed
 DATA_DIR = Path("data")
-DATA_FILE = DATA_DIR / "availability.csv"
-EVENT_FILE = DATA_DIR / "event_date.txt"
-EVENT_LOCATION_FILE = DATA_DIR / "event_location.txt"
+DATA_FILE = DATA_DIR / "shopping_list.csv" # Renamed data file
+# EVENT_FILE = DATA_DIR / "event_date.txt" # Removed
+# EVENT_LOCATION_FILE = DATA_DIR / "event_location.txt" # Removed
 DATA_DIR.mkdir(exist_ok=True)
-
-# -----------------------
-# Load or initialize event date & location
-# -----------------------
-if EVENT_FILE.exists():
-    EVENT_DATE_STR = EVENT_FILE.read_text().strip()
-else:
-    EVENT_DATE_STR = "Friday, November 14, 2025"
-    EVENT_FILE.write_text(EVENT_DATE_STR)
-
-if EVENT_LOCATION_FILE.exists():
-    EVENT_LOCATION = EVENT_LOCATION_FILE.read_text().strip()
-else:
-    EVENT_LOCATION = "TBD"
-    EVENT_LOCATION_FILE.write_text(EVENT_LOCATION)
 
 # -----------------------
 # PAGE SETUP
 # -----------------------
-st.set_page_config(page_title="🀄 Mahjong Sign-up", layout="centered")
+st.set_page_config(page_title="🛒 Shopping List", layout="centered")
 
 # -----------------------
-# STYLES
+# STYLES (Kept styling for layout)
 # -----------------------
 st.markdown("""
-    <style>
-    h1 { font-size: 32px !important; text-align: center; }
-    h2 { font-size: 28px !important; text-align: center; }
-    p, div, label, .stMarkdown { font-size: 18px !important; line-height: 1.6; }
-    .stButton>button {
-        border-radius: 12px;
-        font-size: 16px;
-        font-weight: 500;
-        transition: all 0.2s ease;
-    }
-    </style>
+<style>
+h1 { font-size: 32px !important; text-align: center; }
+h2 { font-size: 28px !important; text-align: center; }
+p, div, label, .stMarkdown { font-size: 18px !important; line-height: 1.6; }
+.stButton>button {border-radius: 12px; font-size: 16px; font-weight: 500; transition: all 0.2s ease; }
+
+.player-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 8px 4px; }
+.player-name { font-weight: 600; font-size: 18px; flex: 1; }
+.toggle-btn { border: none; border-radius: 12px; padding: 6px 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; min-width: 140px; text-align: center; }
+.toggle-btn.green { background-color: #22c55e; color: white; }
+.toggle-btn.gray { background-color: #d3d3d3; color: #333; }
+
+@media (max-width: 480px) {
+    .player-row { flex-direction: row; gap: 6px; padding: 10px 2px; }
+    .player-name { font-size: 16px; }
+    .toggle-btn { font-size: 14px; min-width: 120px; padding: 5px 8px; }
+}
+</style>
 """, unsafe_allow_html=True)
 
 # -----------------------
 # Track active tab in session state
 # -----------------------
-tabs = ["📋 Sign-up", "🔒 Admin"]
+tabs = ["📝 List", "🔒 Admin"] # Updated tab names
 selected_tab = st.session_state.get("selected_tab", tabs[0])
 selected_tab = st.radio("Navigation", tabs, horizontal=True, label_visibility="collapsed")
 
@@ -62,130 +54,82 @@ selected_tab = st.radio("Navigation", tabs, horizontal=True, label_visibility="c
 previous_tab = st.session_state.get("previous_tab", None)
 if previous_tab != selected_tab:
     st.session_state["previous_tab"] = selected_tab
-    # Refresh sign-up page when switching back
-    if selected_tab == "📋 Sign-up":
+    # Refresh list page when switching back
+    if selected_tab == "📝 List":
         st.rerun()
 
 st.session_state["selected_tab"] = selected_tab
 
 # =====================================================
-# TAB 1 — SIGN-UP PAGE
+# TAB 1 — SHOPPING LIST PAGE
 # =====================================================
-if selected_tab == "📋 Sign-up":
-    st.markdown(f"<h1>🀄 Mahjong - Sign-up</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p>Event date: <b>{EVENT_DATE_STR}</b></p>", unsafe_allow_html=True)
-    st.markdown(f"<p>Event location: <b>{EVENT_LOCATION}</b></p>", unsafe_allow_html=True)
+if selected_tab == "📝 List":
+    st.markdown(f"<h1>🛒 My Shopping List</h1>", unsafe_allow_html=True)
+    # st.markdown(f"<p>Event date: <b>{EVENT_DATE_STR}</b></p>", unsafe_allow_html=True) # Removed
+    # st.markdown(f"<p>Event location: <b>{EVENT_LOCATION}</b></p>", unsafe_allow_html=True) # Removed
 
     # Load data
     if DATA_FILE.exists() and DATA_FILE.stat().st_size > 0:
         try:
             df = pd.read_csv(DATA_FILE)
         except pd.errors.EmptyDataError:
-            df = pd.DataFrame(columns=["timestamp", "name", "available"])
+            df = pd.DataFrame(columns=["timestamp", "item", "purchased"]) # Updated column name
     else:
-        df = pd.DataFrame(columns=["timestamp", "name", "available"])
+        df = pd.DataFrame(columns=["timestamp", "item", "purchased"]) # Updated column name
 
     # Ensure proper dtypes
-    if "available" in df.columns:
-        df["available"] = df["available"].astype(bool)
+    if "purchased" in df.columns:
+        df["purchased"] = df["purchased"].astype(bool) # Updated column name
 
-    # Input field for adding a new player
-    st.subheader("Add a Player")
-    new_name = st.text_input("Enter your name")
+    # Input field for adding a new item
+    st.subheader("Add an Item") # Updated heading
+    new_item = st.text_input("Enter the item to purchase") # Updated label
 
-    if st.button("Add Name"):
-        new_name = new_name.strip()
-        if not new_name:
-            st.warning("Please enter a valid name.")
-        elif new_name in df["name"].values:
-            st.warning("That name is already on the list.")
+    if st.button("Add Item"): # Updated button label
+        new_item = new_item.strip()
+        if not new_item:
+            st.warning("Please enter a valid item name.")
+        elif new_item in df["item"].values: # Updated column name
+            st.warning("That item is already on the list.")
         else:
-            new_row = {"timestamp": datetime.now(), "name": new_name, "available": False}
+            new_row = {"timestamp": datetime.now(), "item": new_item, "purchased": False} # Updated column name
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             df.to_csv(DATA_FILE, index=False)
-            st.success(f"{new_name} added to the list.")
+            st.success(f"'{new_item}' added to the list.")
             st.rerun()
 
-    # Display player list in a responsive, mobile-friendly layout
+    # Display item list in a responsive, mobile-friendly layout
     if not df.empty:
         st.markdown("---")
-        st.subheader("Player Availability")
+        st.subheader("Item Status") # Updated heading
 
         # Instruction text
-        st.markdown(
-            "<p style='font-size:16px; color:gray;'>Please click the button below to indicate if you are available.</p>",
-            unsafe_allow_html=True
-        )
-
-        # Add CSS for layout and button styles
-        st.markdown("""
-            <style>
-            .player-row {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                border-bottom: 1px solid #eee;
-                padding: 8px 4px;
-            }
-            .player-name {
-                font-weight: 600;
-                font-size: 18px;
-                flex: 1;
-            }
-            .toggle-btn {
-                border: none;
-                border-radius: 12px;
-                padding: 6px 12px;
-                font-size: 15px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: 0.2s;
-                min-width: 140px;
-                text-align: center;
-            }
-            .toggle-btn.green {
-                background-color: #22c55e;
-                color: white;
-            }
-            .toggle-btn.gray {
-                background-color: #d3d3d3;
-                color: #333;
-            }
-            @media (max-width: 480px) {
-                .player-row {
-                    flex-direction: row;
-                    gap: 6px;
-                    padding: 10px 2px;
-                }
-                .player-name {
-                    font-size: 16px;
-                }
-                .toggle-btn {
-                    font-size: 14px;
-                    min-width: 120px;
-                    padding: 5px 8px;
-                }
-            }
-            </style>
-        """, unsafe_allow_html=True)
+        st.markdown("<p style='font-size:16px; color:gray;'>Click the button to toggle the purchase status.</p>", unsafe_allow_html=True)
 
         # Build each row
+        # Sort to show "Not Purchased" items first, then "Purchased"
+        df = df.sort_values(by="purchased")
         for idx, row in df.iterrows():
-            name = row["name"]
-            available = row["available"]
-
+            item_name = row["item"] # Updated column name
+            purchased = row["purchased"] # Updated column name
+            
+            # Use a checkmark for purchased items
+            display_name = f"~~{item_name}~~" if purchased else item_name
+            
             col1, col2 = st.columns([2, 2])
             with col1:
-                st.markdown(f"<div class='player-name'>{name}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='player-name'>{display_name}</div>", unsafe_allow_html=True)
             with col2:
-                if available:
-                    if st.button("😄 Available", key=f"toggle_{idx}", help="Click to mark unavailable"):
-                        df.loc[idx, "available"] = False
+                if purchased:
+                    # Toggle to Not Purchased
+                    if st.button("✅ Purchased", key=f"toggle_{idx}", help="Click to mark as not purchased"):
+                        df.loc[idx, "purchased"] = False # Updated column name
                         df.to_csv(DATA_FILE, index=False)
                         st.rerun()
                 else:
-                    if st.button("🙁 Not Available", key=f"toggle_{idx}", help="Click to mark available"):
-                        df.loc[idx, "available"] = True
+                    # Toggle to Purchased
+                    if st.button("❌ Not Yet Purchased", key=f"toggle_{idx}", help="Click to mark as purchased"):
+                        df.loc[idx, "purchased"] = True # Updated column name
                         df.to_csv(DATA_FILE, index=False)
                         st.rerun()
 
@@ -195,31 +139,24 @@ if selected_tab == "📋 Sign-up":
 elif selected_tab == "🔒 Admin":
     st.markdown("<h1>🔒 Admin Page</h1>", unsafe_allow_html=True)
     st.write("Enter admin name to access controls:")
-    
     admin_name = st.text_input("Admin name")
+
     if admin_name.strip().lower() == "becky":
         st.success("Welcome, Becky! 👋")
 
-        # Change event date
-        st.subheader("🗓 Change Event Date")
-        new_date = st.date_input("Select new date", value=date.today())
-        if st.button("Save New Date"):
-            pretty_date = new_date.strftime("%A, %B %d, %Y")
-            EVENT_FILE.write_text(pretty_date)
-            st.success(f"Event date updated to {pretty_date}")
+        # Clear purchased items
+        st.subheader("🗑 Clear Purchased Items")
+        if st.button("Remove Purchased Items"):
+            df_active = df[df['purchased'] == False]
+            df_active.to_csv(DATA_FILE, index=False)
+            st.success("Purchased items removed from the list.")
+            st.rerun()
 
-        # Change event location
-        st.subheader("📍 Change Event Location")
-        new_location = st.text_input("Enter new event location", value=EVENT_LOCATION)
-        if st.button("Save New Location"):
-            EVENT_LOCATION_FILE.write_text(new_location.strip())
-            st.success(f"Event location updated to {new_location}")
-        
-      # Reset signups
-        st.subheader("🧹 Reset Sign-ups")
-        if st.button("Clear all sign-ups"):
+        # Reset signups
+        st.subheader("🧹 Reset Entire List")
+        if st.button("Clear ALL items"):
             DATA_FILE.write_text("")  # wipe file
-            st.success("All sign-ups cleared!")
-
+            st.success("The entire shopping list has been cleared!")
+            st.rerun()
     elif admin_name:
         st.error("Access denied.")
