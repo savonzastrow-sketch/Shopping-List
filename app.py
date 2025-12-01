@@ -83,6 +83,11 @@ if selected_tab == "📝 List":
 
     # Input field for adding a new item
     st.subheader("Add an Item") # Updated heading
+
+    # --- ADDED autocomplete="off" HERE ---
+    new_item = st.text_input("Enter the item to purchase", autocomplete="off") 
+    # -------------------------------------
+ 
     new_item = st.text_input("Enter the item to purchase") # Updated label
 
     if st.button("Add Item"): # Updated button label
