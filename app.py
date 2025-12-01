@@ -89,17 +89,17 @@ if selected_tab == "📝 List":
     # -------------------------------------
  
     if st.button("Add Item"): # Updated button label
-    new_item = new_item.strip()
-    if not new_item:
-        st.warning("Please enter a valid item name.")
-    elif new_item in df["item"].values: # Updated column name
-        st.warning("That item is already on the list.")
-    else:
-        new_row = {"timestamp": datetime.now(), "item": new_item, "purchased": False} # Updated column name
-        df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-        df.to_csv(DATA_FILE, index=False)
-        st.success(f"'{new_item}' added to the list.")
-        st.rerun()
+        new_item = new_item.strip()
+        if not new_item:
+            st.warning("Please enter a valid item name.")
+        elif new_item in df["item"].values: # Updated column name
+            st.warning("That item is already on the list.")
+        else:
+            new_row = {"timestamp": datetime.now(), "item": new_item, "purchased": False} # Updated column name
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            df.to_csv(DATA_FILE, index=False)
+            st.success(f"'{new_item}' added to the list.")
+            st.rerun()
 
     # Display item list in a responsive, mobile-friendly layout
     if not df.empty:
