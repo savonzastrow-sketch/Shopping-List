@@ -121,49 +121,60 @@ if selected_tab == "📝 List":
 
     # Display item list in a responsive, mobile-friendly layout
     if not df.empty:
-        st.markdown("---")
-        st.subheader("Item Status") # Updated heading
+    st.markdown("---")
+    st.subheader("Item Status") # Updated heading
 
-        # Instruction text
-        st.markdown("<p style='font-size:16px; color:gray;'>Click the shopping cart/checkmark to toggle the purchase status.</p>", unsafe_allow_html=True)
+    # Instruction text
+    st.markdown("<p style='font-size:16px; color:gray;'>Click the item's emoji status to toggle the purchase status.</p>", unsafe_allow_html=True)
 
-        # Build Header Row (Simpler Header)
-        st.markdown("<div style='display: flex; font-weight: bold; margin-bottom: 5px;'>Item</div>", unsafe_allow_html=True)
-        st.markdown("---")
+    # Handle clicks from query parameters
+    query_params = st.query_params
+    clicked_item_id = query_params.get("toggle", None)
+    
+    if clicked_item_id and clicked_item_id.isdigit():
+        clicked_idx = int(clicked_item_id)
+        if 0 <= clicked_idx < len(df):
+            # Toggle the 'purchased' status
+            df.loc[clicked_idx, "purchased"] = not df.loc[clicked_idx, "purchased"]
+            df.to_csv(DATA_FILE, index=False)
+            
+            # Clear the query param and Rerun to show the update
+            st.query_params.clear() 
+            st.rerun()
+
+    # Build Header Row (Simpler Header)
+    st.markdown("<div style='display: flex; font-weight: bold; margin-bottom: 5px;'>Status / Item</div>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # Sort to show "Not Purchased" items first, then "Purchased"
+    df = df.reset_index(drop=True).sort_values(by="purchased")
+
+    for idx, row in df.iterrows():
+        item_name = row["item"]
+        purchased = row["purchased"]
+
+        # 1. Determine the status emoji and background color
+        status_emoji = "✅" if purchased else "🛒"
+        status_color = "#f0f2f6" if purchased else "white" # light gray or white background
+
+        # 2. Create the URL link to self, passing the index to toggle
+        toggle_url = st.query_params.to_dict()
+        toggle_url['toggle'] = str(idx) # Index is now the key to toggle
         
-        # Sort to show "Not Purchased" items first, then "Purchased"
-        df = df.sort_values(by="purchased")
-        
-        for idx, row in df.iterrows():
-            item_name = row["item"] 
-            purchased = row["purchased"] 
-            
-            # Use a checkmark and strikethrough for purchased items
-            # The display text is now purely for visual effect inside the column
-            display_name = f"<span style='font-size: 14px; {'text-decoration: line-through; color: #888;' if purchased else ''}'>{item_name}</span>"
-            
-            # Use an extremely tight column ratio: 0.5 for the button, 6 for the name
-            col_btn, col_name = st.columns([0.5, 6]) 
-            
-            with col_btn:
-                # Button logic remains the same, using only the emoji
-                if purchased:
-                    # Toggle to Not Purchased
-                    if st.button("✅", key=f"toggle_{idx}", help="Mark as NOT purchased"):
-                        df.loc[idx, "purchased"] = False 
-                        df.to_csv(DATA_FILE, index=False)
-                        st.rerun()
-                else:
-                    # Toggle to Purchased
-                    if st.button("🛒", key=f"toggle_{idx}", help="Mark as purchased"):
-                        df.loc[idx, "purchased"] = True 
-                        df.to_csv(DATA_FILE, index=False)
-                        st.rerun()
-            
-            with col_name:
-                # Display the item name right next to the button
-                # Using st.markdown with padding-top to align it vertically with the button
-                st.markdown(f"<div style='padding-top: 3px;'>{display_name}</div>", unsafe_allow_html=True)
+        # 3. Use an <a> tag (link) wrapped around the content
+        # We style the whole row using display: flex to keep it tight
+        # The 'text-decoration: none' ensures the item name doesn't have a blue link underline
+        item_html = f"""
+        <div style='background-color: {status_color}; padding: 8px; margin-bottom: 5px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'>
+            <a href='?toggle={idx}' style='display: flex; align-items: center; text-decoration: none; color: inherit;'>
+                <span style='font-size: 20px; flex-shrink: 0; margin-right: 10px;'>{status_emoji}</span>
+                <span style='font-size: 14px; color: #333; {"text-decoration: line-through; color: #888;" if purchased else ""};'>
+                    {item_name}
+                </span>
+            </a>
+        </div>
+        """
+        st.markdown(item_html, unsafe_allow_html=True)
 
 # =====================================================
 # TAB 2 — ADMIN PAGE
