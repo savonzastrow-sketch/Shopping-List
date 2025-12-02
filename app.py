@@ -34,17 +34,24 @@ p, div, label, .stMarkdown { font-size: 18px !important; line-height: 1.6; }
     font-size: 16px; 
     font-weight: 500; 
     transition: all 0.2s ease;
-    padding: 6px 12px; /* Set a default padding here */
+    padding: 6px 12px;
 }
 
 /* --- MOBILE SPECIFIC OVERRIDES --- */
 @media (max-width: 480px) {
-    /* Target ALL buttons on small screens and reduce padding */
+    /* 1. Target ALL buttons on small screens and reduce padding */
     .stButton>button {
-        padding: 4px 6px !important; /* SIGNIFICANTLY REDUCED PADDING */
-        font-size: 14px;
-        line-height: 1; /* Helps reduce vertical space */
-        min-width: unset; /* Remove minimum width constraint */
+        padding: 4px 6px !important; 
+        font-size: 14px; 
+        line-height: 1;
+        min-width: unset;
+    }
+    
+    /* 2. TARGET COLUMN SPACING: Set horizontal padding of columns to zero */
+    /* This class targets the internal Streamlit column container */
+    .st-emotion-cache-18ni7ap { 
+        padding-left: 0px !important;
+        padding-right: 0px !important;
     }
 
     .player-row { flex-direction: row; gap: 6px; padding: 10px 2px; }
