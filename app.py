@@ -155,11 +155,14 @@ if selected_tab == "📝 List":
                         df.loc[idx, "purchased"] = True 
                         df.to_csv(DATA_FILE, index=False)
                         st.rerun()
+
+             # Use strikethrough for purchased items
+            display_name = f"<span style='font-size: 14px; {'text-decoration: line-through; color: #888;' if purchased else ''}'>{item_name}</span>"
             
             with col_name:
                 # Item Name (Center)
                 st.markdown(f"<div style='padding-top: 3px;'>{display_name}</div>", unsafe_allow_html=True)
-
+                       
             with col_del:
                 # --- NEW: Delete Button (Right aligned) ---
                 # Use a unique key for the delete button to avoid conflicts
