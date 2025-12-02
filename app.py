@@ -157,7 +157,7 @@ if selected_tab == "📝 List":
                         st.rerun()
 
              # Use strikethrough for purchased items
-            display_name = f"<span style='font-size: 14px; {'text-decoration: line-through; color: #888;' if purchased else ''}'>{item_name}</span>"
+            display_name = f"<span style='font-size: 14px; {'color: #888;' if purchased else ''}'>{item_name}</span>"
             
             with col_name:
                 # Item Name (Center)
