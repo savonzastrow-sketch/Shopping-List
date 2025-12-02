@@ -27,15 +27,33 @@ st.markdown("""
 h1 { font-size: 32px !important; text-align: center; }
 h2 { font-size: 28px !important; text-align: center; }
 p, div, label, .stMarkdown { font-size: 18px !important; line-height: 1.6; }
-.stButton>button {border-radius: 12px; font-size: 16px; font-weight: 500; transition: all 0.2s ease; }
 
-.player-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 8px 4px; }
-.player-name { font-weight: 600; font-size: 18px; flex: 1; }
-.toggle-btn { border: none; border-radius: 12px; padding: 6px 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; min-width: 140px; text-align: center; }
-.toggle-btn.green { background-color: #22c55e; color: white; }
-.toggle-btn.gray { background-color: #d3d3d3; color: #333; }
+/* General button style (kept original) */
+.stButton>button {
+    border-radius: 12px; 
+    font-size: 16px; 
+    font-weight: 500; 
+    transition: all 0.2s ease;
+    padding: 6px 12px;
+}
 
+/* --- MOBILE SPECIFIC OVERRIDES --- */
 @media (max-width: 480px) {
+    /* 1. Target ALL buttons on small screens and reduce padding */
+    .stButton>button {
+        padding: 4px 6px !important; 
+        font-size: 14px; 
+        line-height: 1;
+        min-width: unset;
+    }
+    
+    /* 2. TARGET COLUMN SPACING: Set horizontal padding of columns to zero */
+    /* This class targets the internal Streamlit column container */
+    .st-emotion-cache-18ni7ap { 
+        padding-left: 0px !important;
+        padding-right: 0px !important;
+    }
+
     .player-row { flex-direction: row; gap: 6px; padding: 10px 2px; }
     .player-name { font-size: 16px; }
     .toggle-btn { font-size: 14px; min-width: 120px; padding: 5px 8px; }
@@ -107,34 +125,56 @@ if selected_tab == "📝 List":
         st.subheader("Item Status") # Updated heading
 
         # Instruction text
-        st.markdown("<p style='font-size:16px; color:gray;'>Click the button to toggle the purchase status.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size:16px; color:gray;'>Click the item's emoji status to toggle the purchase status.</p>", unsafe_allow_html=True)
 
-        # Build each row
-        # Sort to show "Not Purchased" items first, then "Purchased"
-        df = df.sort_values(by="purchased")
-        for idx, row in df.iterrows():
-            item_name = row["item"] # Updated column name
-            purchased = row["purchased"] # Updated column name
+        # Handle clicks from query parameters
+        query_params = st.query_params
+        clicked_item_id = query_params.get("toggle", None)
+    
+    if clicked_item_id and clicked_item_id.isdigit():
+        clicked_idx = int(clicked_item_id)
+        if 0 <= clicked_idx < len(df):
+            # Toggle the 'purchased' status
+            df.loc[clicked_idx, "purchased"] = not df.loc[clicked_idx, "purchased"]
+            df.to_csv(DATA_FILE, index=False)
             
-            # Use a checkmark for purchased items
-            display_name = f"~~{item_name}~~" if purchased else item_name
-            
-            col1, col2 = st.columns([2, 2])
-            with col1:
-                st.markdown(f"<div class='player-name'>{display_name}</div>", unsafe_allow_html=True)
-            with col2:
-                if purchased:
-                    # Toggle to Not Purchased
-                    if st.button("✅ To Purchase", key=f"toggle_{idx}", help="Click to mark as not purchased"):
-                        df.loc[idx, "purchased"] = False # Updated column name
-                        df.to_csv(DATA_FILE, index=False)
-                        st.rerun()
-                else:
-                    # Toggle to Purchased
-                    if st.button("❌ Complete", key=f"toggle_{idx}", help="Click to mark as purchased"):
-                        df.loc[idx, "purchased"] = True # Updated column name
-                        df.to_csv(DATA_FILE, index=False)
-                        st.rerun()
+            # Clear the query param and Rerun to show the update
+            st.query_params.clear() 
+            st.rerun()
+
+    # Build Header Row (Simpler Header)
+    st.markdown("<div style='display: flex; font-weight: bold; margin-bottom: 5px;'>Status / Item</div>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # Sort to show "Not Purchased" items first, then "Purchased"
+    df = df.reset_index(drop=True).sort_values(by="purchased")
+
+    for idx, row in df.iterrows():
+        item_name = row["item"]
+        purchased = row["purchased"]
+
+        # 1. Determine the status emoji and background color
+        status_emoji = "✅" if purchased else "🛒"
+        status_color = "#f0f2f6" if purchased else "white" # light gray or white background
+
+        # 2. Create the URL link to self, passing the index to toggle
+        toggle_url = st.query_params.to_dict()
+        toggle_url['toggle'] = str(idx) # Index is now the key to toggle
+        
+        # 3. Use an <a> tag (link) wrapped around the content
+        # We style the whole row using display: flex to keep it tight
+        # The 'text-decoration: none' ensures the item name doesn't have a blue link underline
+        item_html = f"""
+        <div style='background-color: {status_color}; padding: 8px; margin-bottom: 5px; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);'>
+            <a href='?toggle={idx}' style='display: flex; align-items: center; text-decoration: none; color: inherit;'>
+                <span style='font-size: 20px; flex-shrink: 0; margin-right: 10px;'>{status_emoji}</span>
+                <span style='font-size: 14px; color: #333; {"text-decoration: line-through; color: #888;" if purchased else ""};'>
+                    {item_name}
+                </span>
+            </a>
+        </div>
+        """
+        st.markdown(item_html, unsafe_allow_html=True)
 
 # =====================================================
 # TAB 2 — ADMIN PAGE
