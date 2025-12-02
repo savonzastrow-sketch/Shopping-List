@@ -109,41 +109,41 @@ if selected_tab == "📝 List":
         # Instruction text
         st.markdown("<p style='font-size:16px; color:gray;'>Click the button to toggle the purchase status.</p>", unsafe_allow_html=True)
 
-        # Build Header Row (Optional, but good for structure)
-        col_item, col_btn = st.columns([4, 2])
-        col_item.markdown("**Item**", unsafe_allow_html=True)
-        col_btn.markdown("**Status**", unsafe_allow_html=True)
+        # Build Header Row (Simpler Header)
+        st.markdown("<div style='display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 5px;'><span>Item / Status</span></div>", unsafe_allow_html=True)
         st.markdown("---")
         
         # Sort to show "Not Purchased" items first, then "Purchased"
         df = df.sort_values(by="purchased")
+        
         for idx, row in df.iterrows():
             item_name = row["item"] 
             purchased = row["purchased"] 
             
             # Use a checkmark and strikethrough for purchased items
-            display_name = f"~~{item_name}~~" if purchased else item_name
+            display_name = f"<span style='font-size: 16px; padding-left: 5px; {'text-decoration: line-through; color: #888;' if purchased else ''}'>{item_name}</span>"
             
-            # Create columns for the row (smaller ratio: 4 for item, 2 for button)
-            col1, col2 = st.columns([4, 2])
+            # Use st.columns to put the button and item name next to each other
+            col_btn, col_name = st.columns([1, 8]) # Tight columns
             
-            with col1:
-                # Use a smaller font/padding for the item name
-                st.markdown(f"<div style='padding-top: 5px;'>{display_name}</div>", unsafe_allow_html=True)
-            
-            with col2:
+            with col_btn:
+                # Button logic remains the same, using concise text
                 if purchased:
-                    # Use concise text: "Purchased"
-                    if st.button("✅ Done", key=f"toggle_{idx}", help="Click to mark as NOT purchased"):
+                    # Toggle to Not Purchased
+                    if st.button("✅", key=f"toggle_{idx}", help="Mark as NOT purchased"):
                         df.loc[idx, "purchased"] = False 
                         df.to_csv(DATA_FILE, index=False)
                         st.rerun()
                 else:
-                    # Use concise text: "To Buy"
-                    if st.button("🛒 To Buy", key=f"toggle_{idx}", help="Click to mark as purchased"):
+                    # Toggle to Purchased
+                    if st.button("🛒", key=f"toggle_{idx}", help="Mark as purchased"):
                         df.loc[idx, "purchased"] = True 
                         df.to_csv(DATA_FILE, index=False)
                         st.rerun()
+            
+            with col_name:
+                # Display the item name right next to the button
+                st.markdown(display_name, unsafe_allow_html=True)
 
 # =====================================================
 # TAB 2 — ADMIN PAGE
