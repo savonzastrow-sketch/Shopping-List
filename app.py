@@ -120,57 +120,76 @@ if selected_tab == "📝 List":
             st.rerun()
 
     # Display item list in a responsive, compact inline layout
-    if not df.empty:
-        st.markdown("---")
-        st.subheader("Item Status")
+if not df.empty:
+    st.markdown("---")
+    st.subheader("Item Status")
 
-        # Instruction text
-        st.markdown("<p style='font-size:16px; color:gray;'>Click status to toggle purchase, or the trash can to delete.</p>", unsafe_allow_html=True)
+    # Instruction text
+    st.markdown("<p style='font-size:16px; color:gray;'>Click the item's emoji status or trash can to interact.</p>", unsafe_allow_html=True)
 
-        # Build Header Row (Updated to show all three columns)
-        # Using columns for the header too, for alignment
-        col_status_head, col_item_head, col_delete_head = st.columns([0.5, 5, 0.5])
-        col_item_head.markdown("<div style='font-weight: bold;'>Item</div>", unsafe_allow_html=True)
-        st.markdown("---")
+    # ----------------------------------------------------
+    # CORE LOGIC: Handle clicks from query parameters (FAST RERUN)
+    # ----------------------------------------------------
+    query_params = st.query_params
+    
+    # Check for toggle click
+    toggle_id = query_params.get("toggle", None)
+    if toggle_id and toggle_id.isdigit():
+        clicked_idx = int(toggle_id)
+        # Find the correct original index based on current df index
+        if clicked_idx in df.index:
+            # Toggle the 'purchased' status
+            df.loc[clicked_idx, "purchased"] = not df.loc[clicked_idx, "purchased"]
+            df.to_csv(DATA_FILE, index=False)
+            st.query_params.clear() 
+            st.rerun()
+
+    # Check for delete click
+    delete_id = query_params.get("delete", None)
+    if delete_id and delete_id.isdigit():
+        clicked_idx = int(delete_id)
+        if clicked_idx in df.index:
+            # Delete the item
+            df = df.drop(clicked_idx)
+            df.to_csv(DATA_FILE, index=False)
+            st.query_params.clear() 
+            st.rerun()
+
+    # Build Header Row 
+    st.markdown("<div style='font-weight: bold; margin-bottom: 5px;'>Status / Item / Delete</div>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # Sort to show "Not Purchased" items first, then "Purchased"
+    df = df.sort_values(by="purchased")
+    
+    for idx, row in df.iterrows():
+        item_name = row["item"]
+        purchased = row["purchased"]
+
+        # 1. Determine the status emoji (clickable link to toggle status)
+        status_emoji = "✅" if purchased else "🛒"
+        status_style = "color: #888;" if purchased else "color: #000;"
         
-        # Sort to show "Not Purchased" items first, then "Purchased"
-        df = df.reset_index(drop=True).sort_values(by="purchased")
+        # 2. Link for the status emoji (to toggle purchase)
+        toggle_link = f"<a href='?toggle={idx}' style='text-decoration: none; font-size: 18px; flex-shrink: 0; margin-right: 10px; {status_style}'>{status_emoji}</a>"
         
-        for idx, row in df.iterrows():
-            item_name = row["item"] 
-            purchased = row["purchased"] 
-                                    
-            # --- UPDATED: Three columns for Status, Item, and Delete ---
-            col_btn, col_name, col_del = st.columns([0.5, 5, 0.5]) 
-            
-            with col_btn:
-                # Toggle Status Button (Left side)
-                if purchased:
-                    if st.button("✅", key=f"toggle_{idx}", help="Mark as NOT purchased"):
-                        df.loc[idx, "purchased"] = False 
-                        df.to_csv(DATA_FILE, index=False)
-                        st.rerun()
-                else:
-                    if st.button("🛒", key=f"toggle_{idx}", help="Mark as purchased"):
-                        df.loc[idx, "purchased"] = True 
-                        df.to_csv(DATA_FILE, index=False)
-                        st.rerun()
+        # 3. Link for the delete emoji (to delete the item)
+        delete_link = f"<a href='?delete={idx}' style='text-decoration: none; font-size: 18px; flex-shrink: 0; color: #f00;'>🗑️</a>"
 
-             # Use strikethrough for purchased items
-            display_name = f"<span style='font-size: 14px; {'color: #888;' if purchased else ''}'>{item_name}</span>"
-            
-            with col_name:
-                # Item Name (Center)
-                st.markdown(f"<div style='padding-top: 3px;'>{display_name}</div>", unsafe_allow_html=True)
-                       
-            with col_del:
-                # --- NEW: Delete Button (Right aligned) ---
-                # Use a unique key for the delete button to avoid conflicts
-                if st.button("🗑️", key=f"delete_{idx}", help="Delete this item"):
-                    # Delete logic: filter out the current index
-                    df = df.drop(idx)
-                    df.to_csv(DATA_FILE, index=False)
-                    st.rerun()
+        # 4. Item Name display (no link)
+        item_name_display = f"<span style='font-size: 14px; flex-grow: 1; {status_style}'>{item_name}</span>"
+
+        # 5. Assemble the entire row in a single Markdown block using flexbox
+        item_html = f"""
+        <div style='display: flex; align-items: center; justify-content: space-between; padding: 8px 5px; margin-bottom: 3px; border-bottom: 1px solid #eee; min-height: 40px;'>
+            <div style='display: flex; align-items: center; flex-grow: 1; min-width: 1px;'>
+                {toggle_link}
+                {item_name_display}
+            </div>
+            {delete_link}
+        </div>
+        """
+        st.markdown(item_html, unsafe_allow_html=True)
    
 # =====================================================
 # TAB 2 — ADMIN PAGE
