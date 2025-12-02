@@ -193,11 +193,12 @@ for store_name, store_tab in zip(STORES, store_tabs):
                 status_style = "color: #888;" if purchased else "color: #000;"
                 
                 # 2. Link for the status emoji (to toggle purchase)
-                # The idx here is the unique index from the original DataFrame
-                toggle_link = f"<a href='?toggle={idx}' style='text-decoration: none; font-size: 18px; flex-shrink: 0; margin-right: 10px; {status_style}'>{status_emoji}</a>"
+                # ADDED target="_self"
+                toggle_link = f"<a href='?toggle={idx}' target='_self' style='text-decoration: none; font-size: 18px; flex-shrink: 0; margin-right: 10px; {status_style}'>{status_emoji}</a>"
                 
                 # 3. Link for the delete emoji (to delete the item)
-                delete_link = f"<a href='?delete={idx}' style='text-decoration: none; font-size: 18px; flex-shrink: 0; color: #f00;'>🗑️</a>"
+                # ADDED target="_self"
+                delete_link = f"<a href='?delete={idx}' target='_self' style='text-decoration: none; font-size: 18px; flex-shrink: 0; color: #f00;'>🗑️</a>"
 
                 # 4. Item Name display (no link)
                 item_name_display = f"<span style='font-size: 14px; flex-grow: 1; {status_style}'>{item_name}</span>"
