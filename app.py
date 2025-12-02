@@ -66,6 +66,7 @@ allowing Streamlit to handle the update faster.
 # Track active tab in session state
 # -----------------------
 tabs = ["📝 List"] 
+selected_tab = "📝 List"
 
 # -----------------------
 # DATA LOADING FUNCTION
