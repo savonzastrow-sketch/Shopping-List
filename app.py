@@ -109,30 +109,39 @@ if selected_tab == "📝 List":
         # Instruction text
         st.markdown("<p style='font-size:16px; color:gray;'>Click the button to toggle the purchase status.</p>", unsafe_allow_html=True)
 
-        # Build each row
+        # Build Header Row (Optional, but good for structure)
+        col_item, col_btn = st.columns([4, 2])
+        col_item.markdown("**Item**", unsafe_allow_html=True)
+        col_btn.markdown("**Status**", unsafe_allow_html=True)
+        st.markdown("---")
+        
         # Sort to show "Not Purchased" items first, then "Purchased"
         df = df.sort_values(by="purchased")
         for idx, row in df.iterrows():
-            item_name = row["item"] # Updated column name
-            purchased = row["purchased"] # Updated column name
+            item_name = row["item"] 
+            purchased = row["purchased"] 
             
-            # Use a checkmark for purchased items
+            # Use a checkmark and strikethrough for purchased items
             display_name = f"~~{item_name}~~" if purchased else item_name
             
-            col1, col2 = st.columns([2, 2])
+            # Create columns for the row (smaller ratio: 4 for item, 2 for button)
+            col1, col2 = st.columns([4, 2])
+            
             with col1:
-                st.markdown(f"<div class='player-name'>{display_name}</div>", unsafe_allow_html=True)
+                # Use a smaller font/padding for the item name
+                st.markdown(f"<div style='padding-top: 5px;'>{display_name}</div>", unsafe_allow_html=True)
+            
             with col2:
                 if purchased:
-                    # Toggle to Not Purchased
-                    if st.button("✅ To Purchase", key=f"toggle_{idx}", help="Click to mark as not purchased"):
-                        df.loc[idx, "purchased"] = False # Updated column name
+                    # Use concise text: "Purchased"
+                    if st.button("✅ Done", key=f"toggle_{idx}", help="Click to mark as NOT purchased"):
+                        df.loc[idx, "purchased"] = False 
                         df.to_csv(DATA_FILE, index=False)
                         st.rerun()
                 else:
-                    # Toggle to Purchased
-                    if st.button("❌ Complete", key=f"toggle_{idx}", help="Click to mark as purchased"):
-                        df.loc[idx, "purchased"] = True # Updated column name
+                    # Use concise text: "To Buy"
+                    if st.button("🛒 To Buy", key=f"toggle_{idx}", help="Click to mark as purchased"):
+                        df.loc[idx, "purchased"] = True 
                         df.to_csv(DATA_FILE, index=False)
                         st.rerun()
 
