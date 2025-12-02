@@ -7,12 +7,12 @@ from datetime import datetime
 # -----------------------
 # CONFIG
 # -----------------------
-# TIMEZONE = ZoneInfo("America/New_York") # Not needed
 DATA_DIR = Path("data")
-DATA_FILE = DATA_DIR / "shopping_list.csv" # Renamed data file
-# EVENT_FILE = DATA_DIR / "event_date.txt" # Removed
-# EVENT_LOCATION_FILE = DATA_DIR / "event_location.txt" # Removed
+DATA_FILE = DATA_DIR / "shopping_list.csv" 
 DATA_DIR.mkdir(exist_ok=True)
+
+# Define Categories
+CATEGORIES = ["Vegetables", "Beverages", "Meat/Dairy", "Frozen", "Dry Goods"]
 
 # -----------------------
 # PAGE SETUP
@@ -20,7 +20,7 @@ DATA_DIR.mkdir(exist_ok=True)
 st.set_page_config(page_title="🛒 Shopping List", layout="centered")
 
 # -----------------------
-# STYLES (Kept styling for layout)
+# STYLES (Includes JavaScript for faster internal rerun)
 # -----------------------
 st.markdown("""
 <style>
@@ -28,43 +28,44 @@ h1 { font-size: 32px !important; text-align: center; }
 h2 { font-size: 28px !important; text-align: center; }
 p, div, label, .stMarkdown { font-size: 18px !important; line-height: 1.6; }
 
-/* General button style (kept original) */
+/* General button style (Kept for other buttons) */
 .stButton>button {
-    border-radius: 12px; 
-    font-size: 16px; 
-    font-weight: 500; 
-    transition: all 0.2s ease;
-    padding: 6px 12px;
+    border-radius: 12px; font-size: 16px; font-weight: 500; transition: all 0.2s ease; padding: 6px 12px;
 }
 
-/* --- MOBILE SPECIFIC OVERRIDES --- */
+/* Hide the main Streamlit element padding on small screens for max space */
 @media (max-width: 480px) {
-    /* 1. Target ALL buttons on small screens and reduce padding */
-    .stButton>button {
-        padding: 4px 6px !important; 
-        font-size: 14px; 
-        line-height: 1;
-        min-width: unset;
+    /* Target main content padding */
+    .st-emotion-cache-1pxx0nch { 
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
     }
-    
-    /* 2. TARGET COLUMN SPACING: Set horizontal padding of columns to zero */
-    /* This class targets the internal Streamlit column container */
-    .st-emotion-cache-18ni7ap { 
-        padding-left: 0px !important;
-        padding-right: 0px !important;
-    }
-
-    .player-row { flex-direction: row; gap: 6px; padding: 10px 2px; }
-    .player-name { font-size: 16px; }
-    .toggle-btn { font-size: 14px; min-width: 120px; padding: 5px 8px; }
 }
+
+/* CRITICAL JS SNIPPET (must be run as unsafe_allow_html=True): 
+This script ensures that when a link with '?toggle=' or '?delete=' is clicked, 
+it updates the URL but does NOT trigger a full browser navigation/refresh, 
+allowing Streamlit to handle the update faster.
+*/
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        document.body.addEventListener('click', (e) => {
+            if (e.target.tagName === 'A' && (e.target.href.includes('?toggle=') || e.target.href.includes('?delete='))) {
+                e.preventDefault();
+                history.pushState(null, '', e.target.href);
+                window.location.reload(true);
+            }
+        });
+    });
+</script>
+
 </style>
 """, unsafe_allow_html=True)
 
 # -----------------------
 # Track active tab in session state
 # -----------------------
-tabs = ["📝 List", "🔒 Admin"] # Updated tab names
+tabs = ["📝 List", "🔒 Admin"] 
 selected_tab = st.session_state.get("selected_tab", tabs[0])
 selected_tab = st.radio("Navigation", tabs, horizontal=True, label_visibility="collapsed")
 
@@ -78,119 +79,145 @@ if previous_tab != selected_tab:
 
 st.session_state["selected_tab"] = selected_tab
 
+# -----------------------
+# DATA LOADING FUNCTION
+# -----------------------
+def load_data():
+    """Loads CSV and ensures necessary columns exist."""
+    default_cols = ["timestamp", "item", "purchased", "category"]
+    
+    if DATA_FILE.exists() and DATA_FILE.stat().st_size > 0:
+        try:
+            df = pd.read_csv(DATA_FILE)
+            # Ensure 'category' column exists for older files
+            if 'category' not in df.columns:
+                df['category'] = 'Uncategorized' 
+        except pd.errors.EmptyDataError:
+            df = pd.DataFrame(columns=default_cols)
+    else:
+        df = pd.DataFrame(columns=default_cols)
+    
+    # Ensure proper dtypes
+    if "purchased" in df.columns:
+        df["purchased"] = df["purchased"].astype(bool)
+        
+    return df
+
+
 # =====================================================
 # TAB 1 — SHOPPING LIST PAGE
 # =====================================================
 if selected_tab == "📝 List":
     st.markdown(f"<h1>🛒 My Shopping List</h1>", unsafe_allow_html=True)
-    # st.markdown(f"<p>Event date: <b>{EVENT_DATE_STR}</b></p>", unsafe_allow_html=True) # Removed
-    # st.markdown(f"<p>Event location: <b>{EVENT_LOCATION}</b></p>", unsafe_allow_html=True) # Removed
+    
+    df = load_data()
 
-    # Load data
-    if DATA_FILE.exists() and DATA_FILE.stat().st_size > 0:
-        try:
-            df = pd.read_csv(DATA_FILE)
-        except pd.errors.EmptyDataError:
-            df = pd.DataFrame(columns=["timestamp", "item", "purchased"]) # Updated column name
-    else:
-        df = pd.DataFrame(columns=["timestamp", "item", "purchased"]) # Updated column name
+    # ----------------------------------------------------
+    # ADD ITEM FORM
+    # ----------------------------------------------------
+    st.subheader("Add an Item")
 
-    # Ensure proper dtypes
-    if "purchased" in df.columns:
-        df["purchased"] = df["purchased"].astype(bool) # Updated column name
-
-    # Input field for adding a new item
-    st.subheader("Add an Item") # Updated heading
-
-    # --- ADDED autocomplete="off" HERE ---
+    # --- Category Selection ---
+    new_category = st.selectbox(
+        "Select Category", 
+        CATEGORIES,
+        index=None,
+        placeholder="Choose a category..."
+    )
     new_item = st.text_input("Enter the item to purchase", autocomplete="off") 
-    # -------------------------------------
- 
-    if st.button("Add Item"): # Updated button label
+
+    if st.button("Add Item"):
         new_item = new_item.strip()
-        if not new_item:
+        
+        if not new_category:
+            st.warning("Please select a category.")
+        elif not new_item:
             st.warning("Please enter a valid item name.")
-        elif new_item in df["item"].values: # Updated column name
+        elif new_item in df["item"].values:
             st.warning("That item is already on the list.")
         else:
-            new_row = {"timestamp": datetime.now(), "item": new_item, "purchased": False} # Updated column name
+            new_row = {
+                "timestamp": datetime.now(), 
+                "item": new_item, 
+                "purchased": False, 
+                "category": new_category
+            } 
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             df.to_csv(DATA_FILE, index=False)
-            st.success(f"'{new_item}' added to the list.")
+            st.success(f"'{new_item}' added to the list under '{new_category}'.")
             st.rerun()
-
-    # Display item list in a responsive, compact inline layout
-if not df.empty:
-    st.markdown("---")
-    st.subheader("Item Status")
-
-    # Instruction text
-    st.markdown("<p style='font-size:16px; color:gray;'>Click the item's emoji status or trash can to interact.</p>", unsafe_allow_html=True)
 
     # ----------------------------------------------------
-    # CORE LOGIC: Handle clicks from query parameters (FAST RERUN)
+    # DISPLAY ITEM LIST (Category Grouping & Clickable Markdown Hack)
     # ----------------------------------------------------
-    query_params = st.query_params
-    
-    # Check for toggle click
-    toggle_id = query_params.get("toggle", None)
-    if toggle_id and toggle_id.isdigit():
-        clicked_idx = int(toggle_id)
-        # Find the correct original index based on current df index
-        if clicked_idx in df.index:
-            # Toggle the 'purchased' status
-            df.loc[clicked_idx, "purchased"] = not df.loc[clicked_idx, "purchased"]
-            df.to_csv(DATA_FILE, index=False)
-            st.query_params.clear() 
-            st.rerun()
+    if not df.empty:
+        st.markdown("---")
+        st.subheader("Item Status")
 
-    # Check for delete click
-    delete_id = query_params.get("delete", None)
-    if delete_id and delete_id.isdigit():
-        clicked_idx = int(delete_id)
-        if clicked_idx in df.index:
-            # Delete the item
-            df = df.drop(clicked_idx)
-            df.to_csv(DATA_FILE, index=False)
-            st.query_params.clear() 
-            st.rerun()
+        st.markdown("<p style='font-size:16px; color:gray;'>Click the status or trash can icon to interact.</p>", unsafe_allow_html=True)
 
-    # Build Header Row 
-    st.markdown("<div style='font-weight: bold; margin-bottom: 5px;'>Status / Item / Delete</div>", unsafe_allow_html=True)
-    st.markdown("---")
-
-    # Sort to show "Not Purchased" items first, then "Purchased"
-    df = df.sort_values(by="purchased")
-    
-    for idx, row in df.iterrows():
-        item_name = row["item"]
-        purchased = row["purchased"]
-
-        # 1. Determine the status emoji (clickable link to toggle status)
-        status_emoji = "✅" if purchased else "🛒"
-        status_style = "color: #888;" if purchased else "color: #000;"
+        # ----------------------------------------------------
+        # CORE LOGIC: Handle clicks from query parameters (FAST RERUN)
+        # ----------------------------------------------------
+        query_params = st.query_params
         
-        # 2. Link for the status emoji (to toggle purchase)
-        toggle_link = f"<a href='?toggle={idx}' style='text-decoration: none; font-size: 18px; flex-shrink: 0; margin-right: 10px; {status_style}'>{status_emoji}</a>"
+        # Check for toggle click
+        toggle_id = query_params.get("toggle", None)
+        if toggle_id and toggle_id.isdigit():
+            clicked_idx = int(toggle_id)
+            if clicked_idx in df.index:
+                df.loc[clicked_idx, "purchased"] = not df.loc[clicked_idx, "purchased"]
+                df.to_csv(DATA_FILE, index=False)
+                st.query_params.clear() 
+                st.rerun()
+
+        # Check for delete click
+        delete_id = query_params.get("delete", None)
+        if delete_id and delete_id.isdigit():
+            clicked_idx = int(delete_id)
+            if clicked_idx in df.index:
+                df = df.drop(clicked_idx)
+                df.to_csv(DATA_FILE, index=False)
+                st.query_params.clear() 
+                st.rerun()
+
+        # Group and Sort Items: Group by category, then sort by purchased status within each group
+        df_grouped = df.sort_values(by=["category", "purchased"])
         
-        # 3. Link for the delete emoji (to delete the item)
-        delete_link = f"<a href='?delete={idx}' style='text-decoration: none; font-size: 18px; flex-shrink: 0; color: #f00;'>🗑️</a>"
+        # Unique categories in the list
+        for category, group_df in df_grouped.groupby("category"):
+            st.markdown(f"**<span style='font-size: 20px; color: #1f77b4;'>{category}</span>**", unsafe_allow_html=True)
+                        
+            for idx, row in group_df.iterrows():
+                item_name = row["item"]
+                purchased = row["purchased"]
 
-        # 4. Item Name display (no link)
-        item_name_display = f"<span style='font-size: 14px; flex-grow: 1; {status_style}'>{item_name}</span>"
+                # 1. Determine the status emoji and style (color only)
+                status_emoji = "✅" if purchased else "🛒"
+                status_style = "color: #888;" if purchased else "color: #000;"
+                
+                # 2. Link for the status emoji (to toggle purchase)
+                toggle_link = f"<a href='?toggle={idx}' style='text-decoration: none; font-size: 18px; flex-shrink: 0; margin-right: 10px; {status_style}'>{status_emoji}</a>"
+                
+                # 3. Link for the delete emoji (to delete the item)
+                delete_link = f"<a href='?delete={idx}' style='text-decoration: none; font-size: 18px; flex-shrink: 0; color: #f00;'>🗑️</a>"
 
-        # 5. Assemble the entire row in a single Markdown block using flexbox
-        item_html = f"""
-        <div style='display: flex; align-items: center; justify-content: space-between; padding: 8px 5px; margin-bottom: 3px; border-bottom: 1px solid #eee; min-height: 40px;'>
-            <div style='display: flex; align-items: center; flex-grow: 1; min-width: 1px;'>
-                {toggle_link}
-                {item_name_display}
-            </div>
-            {delete_link}
-        </div>
-        """
-        st.markdown(item_html, unsafe_allow_html=True)
-   
+                # 4. Item Name display (no link)
+                item_name_display = f"<span style='font-size: 14px; flex-grow: 1; {status_style}'>{item_name}</span>"
+
+                # 5. Assemble the entire row in a single Markdown block using flexbox
+                item_html = f"""
+                <div style='display: flex; align-items: center; justify-content: space-between; padding: 8px 5px; margin-bottom: 3px; border-bottom: 1px solid #eee; min-height: 40px;'>
+                    <div style='display: flex; align-items: center; flex-grow: 1; min-width: 1px;'>
+                        {toggle_link}
+                        {item_name_display}
+                    </div>
+                    {delete_link}
+                </div>
+                """
+                st.markdown(item_html, unsafe_allow_html=True)
+
+
 # =====================================================
 # TAB 2 — ADMIN PAGE
 # =====================================================
@@ -201,6 +228,8 @@ elif selected_tab == "🔒 Admin":
 
     if admin_name.strip().lower() == "becky":
         st.success("Welcome, Becky! 👋")
+        
+        df = load_data()
 
         # Clear purchased items
         st.subheader("🗑 Clear Purchased Items")
