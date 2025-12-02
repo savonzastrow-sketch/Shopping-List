@@ -133,7 +133,7 @@ if selected_tab == "📝 List":
             
             # Use a checkmark and strikethrough for purchased items
             # The display text is now purely for visual effect inside the column
-            display_name = f"<span style='{'text-decoration: line-through; color: #888;' if purchased else ''}'>{item_name}</span>"
+            display_name = f"<span style='font-size: 14px; {'text-decoration: line-through; color: #888;' if purchased else ''}'>{item_name}</span>"
             
             # Use an extremely tight column ratio: 0.5 for the button, 6 for the name
             col_btn, col_name = st.columns([0.5, 6]) 
@@ -156,7 +156,7 @@ if selected_tab == "📝 List":
             with col_name:
                 # Display the item name right next to the button
                 # Using st.markdown with padding-top to align it vertically with the button
-                st.markdown(f"<div style='font-size: 16px; padding-top: 5px;'>{display_name}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='padding-top: 3px;'>{display_name}</div>", unsafe_allow_html=True)
 
 # =====================================================
 # TAB 2 — ADMIN PAGE
