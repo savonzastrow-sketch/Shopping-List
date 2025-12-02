@@ -65,19 +65,7 @@ allowing Streamlit to handle the update faster.
 # -----------------------
 # Track active tab in session state
 # -----------------------
-tabs = ["📝 List", "🔒 Admin"] 
-selected_tab = st.session_state.get("selected_tab", tabs[0])
-selected_tab = st.radio("Navigation", tabs, horizontal=True, label_visibility="collapsed")
-
-# Detect tab switch
-previous_tab = st.session_state.get("previous_tab", None)
-if previous_tab != selected_tab:
-    st.session_state["previous_tab"] = selected_tab
-    # Refresh list page when switching back
-    if selected_tab == "📝 List":
-        st.rerun()
-
-st.session_state["selected_tab"] = selected_tab
+tabs = ["📝 List"] 
 
 # -----------------------
 # DATA LOADING FUNCTION
@@ -216,34 +204,3 @@ if selected_tab == "📝 List":
                 </div>
                 """
                 st.markdown(item_html, unsafe_allow_html=True)
-
-
-# =====================================================
-# TAB 2 — ADMIN PAGE
-# =====================================================
-elif selected_tab == "🔒 Admin":
-    st.markdown("<h1>🔒 Admin Page</h1>", unsafe_allow_html=True)
-    st.write("Enter admin name to access controls:")
-    admin_name = st.text_input("Admin name")
-
-    if admin_name.strip().lower() == "becky":
-        st.success("Welcome, Becky! 👋")
-        
-        df = load_data()
-
-        # Clear purchased items
-        st.subheader("🗑 Clear Purchased Items")
-        if st.button("Remove Purchased Items"):
-            df_active = df[df['purchased'] == False]
-            df_active.to_csv(DATA_FILE, index=False)
-            st.success("Purchased items removed from the list.")
-            st.rerun()
-
-        # Reset signups
-        st.subheader("🧹 Reset Entire List")
-        if st.button("Clear ALL items"):
-            DATA_FILE.write_text("")  # wipe file
-            st.success("The entire shopping list has been cleared!")
-            st.rerun()
-    elif admin_name:
-        st.error("Access denied.")
