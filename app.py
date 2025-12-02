@@ -107,10 +107,10 @@ if selected_tab == "📝 List":
         st.subheader("Item Status") # Updated heading
 
         # Instruction text
-        st.markdown("<p style='font-size:16px; color:gray;'>Click the button to toggle the purchase status.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size:16px; color:gray;'>Click the shopping cart/checkmark to toggle the purchase status.</p>", unsafe_allow_html=True)
 
         # Build Header Row (Simpler Header)
-        st.markdown("<div style='display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 5px;'><span>Item / Status</span></div>", unsafe_allow_html=True)
+        st.markdown("<div style='display: flex; font-weight: bold; margin-bottom: 5px;'>Item</div>", unsafe_allow_html=True)
         st.markdown("---")
         
         # Sort to show "Not Purchased" items first, then "Purchased"
@@ -121,13 +121,14 @@ if selected_tab == "📝 List":
             purchased = row["purchased"] 
             
             # Use a checkmark and strikethrough for purchased items
-            display_name = f"<span style='font-size: 16px; padding-left: 5px; {'text-decoration: line-through; color: #888;' if purchased else ''}'>{item_name}</span>"
+            # The display text is now purely for visual effect inside the column
+            display_name = f"<span style='{'text-decoration: line-through; color: #888;' if purchased else ''}'>{item_name}</span>"
             
-            # Use st.columns to put the button and item name next to each other
-            col_btn, col_name = st.columns([1, 8]) # Tight columns
+            # Use an extremely tight column ratio: 0.5 for the button, 6 for the name
+            col_btn, col_name = st.columns([0.5, 6]) 
             
             with col_btn:
-                # Button logic remains the same, using concise text
+                # Button logic remains the same, using only the emoji
                 if purchased:
                     # Toggle to Not Purchased
                     if st.button("✅", key=f"toggle_{idx}", help="Mark as NOT purchased"):
@@ -143,7 +144,8 @@ if selected_tab == "📝 List":
             
             with col_name:
                 # Display the item name right next to the button
-                st.markdown(display_name, unsafe_allow_html=True)
+                # Using st.markdown with padding-top to align it vertically with the button
+                st.markdown(f"<div style='font-size: 16px; padding-top: 5px;'>{display_name}</div>", unsafe_allow_html=True)
 
 # =====================================================
 # TAB 2 — ADMIN PAGE
