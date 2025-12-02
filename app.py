@@ -27,15 +27,26 @@ st.markdown("""
 h1 { font-size: 32px !important; text-align: center; }
 h2 { font-size: 28px !important; text-align: center; }
 p, div, label, .stMarkdown { font-size: 18px !important; line-height: 1.6; }
-.stButton>button {border-radius: 12px; font-size: 16px; font-weight: 500; transition: all 0.2s ease; }
 
-.player-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 8px 4px; }
-.player-name { font-weight: 600; font-size: 18px; flex: 1; }
-.toggle-btn { border: none; border-radius: 12px; padding: 6px 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; min-width: 140px; text-align: center; }
-.toggle-btn.green { background-color: #22c55e; color: white; }
-.toggle-btn.gray { background-color: #d3d3d3; color: #333; }
+/* General button style (kept original) */
+.stButton>button {
+    border-radius: 12px; 
+    font-size: 16px; 
+    font-weight: 500; 
+    transition: all 0.2s ease;
+    padding: 6px 12px; /* Set a default padding here */
+}
 
+/* --- MOBILE SPECIFIC OVERRIDES --- */
 @media (max-width: 480px) {
+    /* Target ALL buttons on small screens and reduce padding */
+    .stButton>button {
+        padding: 4px 6px !important; /* SIGNIFICANTLY REDUCED PADDING */
+        font-size: 14px;
+        line-height: 1; /* Helps reduce vertical space */
+        min-width: unset; /* Remove minimum width constraint */
+    }
+
     .player-row { flex-direction: row; gap: 6px; padding: 10px 2px; }
     .player-name { font-size: 16px; }
     .toggle-btn { font-size: 14px; min-width: 120px; padding: 5px 8px; }
