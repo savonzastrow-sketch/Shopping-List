@@ -121,15 +121,15 @@ if selected_tab == "📝 List":
 
     # Display item list in a responsive, mobile-friendly layout
     if not df.empty:
-    st.markdown("---")
-    st.subheader("Item Status") # Updated heading
+        st.markdown("---")
+        st.subheader("Item Status") # Updated heading
 
-    # Instruction text
-    st.markdown("<p style='font-size:16px; color:gray;'>Click the item's emoji status to toggle the purchase status.</p>", unsafe_allow_html=True)
+        # Instruction text
+        st.markdown("<p style='font-size:16px; color:gray;'>Click the item's emoji status to toggle the purchase status.</p>", unsafe_allow_html=True)
 
-    # Handle clicks from query parameters
-    query_params = st.query_params
-    clicked_item_id = query_params.get("toggle", None)
+        # Handle clicks from query parameters
+        query_params = st.query_params
+        clicked_item_id = query_params.get("toggle", None)
     
     if clicked_item_id and clicked_item_id.isdigit():
         clicked_idx = int(clicked_item_id)
