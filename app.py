@@ -139,10 +139,7 @@ if selected_tab == "📝 List":
         for idx, row in df.iterrows():
             item_name = row["item"] 
             purchased = row["purchased"] 
-            
-            # Use strikethrough for purchased items
-            display_name = f"<span style='font-size: 14px; {'text-decoration: line-through; color: #888;' if purchased else ''}'>{item_name}</span>"
-            
+                                    
             # --- UPDATED: Three columns for Status, Item, and Delete ---
             col_btn, col_name, col_del = st.columns([0.5, 5, 0.5]) 
             
