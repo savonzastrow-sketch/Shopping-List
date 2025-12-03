@@ -182,8 +182,7 @@ for store_name, store_tab in zip(STORES, store_tabs):
         # Unique categories in the list
         for category, group_df in df_grouped.groupby("category"):
             st.markdown(f"**<span style='font-size: 20px; color: #1f77b4; margin-bottom: 0px !important;'>{category}</span>**", unsafe_allow_html=True)
-            st.markdown("---") # Category Divider
-            
+                       
             for idx, row in group_df.iterrows():
                 item_name = row["item"]
                 purchased = row["purchased"]
