@@ -1,20 +1,21 @@
 import streamlit as st
 import pandas as pd
-from pathlib import Path
 from datetime import datetime
+import io # New Import for handling file I/O
 import json # New Import for handling secrets
-from io import StringIO # New Import for handling CSV string
 
-# New Imports for Google Drive
-from pydrive2.auth import GoogleAuth
-from pydrive2.drive import GoogleDrive
+# New Imports for Google Drive using googleapiclient
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
+from google.oauth2 import service_account
 
 # -----------------------
 # CONFIG
 # -----------------------
-# **REPLACE THIS WITH YOUR TARGET GOOGLE DRIVE FOLDER ID**
-SHOPPING_FOLDER_ID = "YOUR_GOOGLE_DRIVE_FOLDER_ID" 
+# NOTE: Using the same FOLDER_ID and DELEGATED_EMAIL as the journal app
+SHOPPING_FOLDER_ID = "0AOJV_s4TPqDcUk9PVA" 
 SHOPPING_FILE_NAME = "shopping_list.csv" # The file name on Drive
+DELEGATED_EMAIL = "stefan@zeitadvisory.com"
 
 # Define Categories and Stores
 CATEGORIES = ["Vegetables", "Beverages", "Meat/Dairy", "Frozen", "Dry Goods"]
@@ -26,79 +27,90 @@ STORES = ["Costco", "Trader Joe's", "Whole Foods", "Other"]
 st.set_page_config(page_title="🛒 Shopping List", layout="centered")
 
 
-# -----------------------
-# GOOGLE DRIVE FUNCTIONS
-# -----------------------
+# ----------------------------------------------------------------------------------
+# GOOGLE DRIVE SERVICE FUNCTIONS (Matching Journal App's Delegation Logic)
+# ----------------------------------------------------------------------------------
 @st.cache_resource
 def get_drive_service():
-    """Authenticates and returns the GoogleDrive service object using Streamlit Secrets."""
-    
-    # 1. Get the Service Account info from Streamlit secrets
-    # The secrets are stored under the [gcp_service_account] key in the TOML file (as seen on the screen)
-    # We must construct a dictionary containing the secret values
-    
-    # Use st.secrets to securely access the credentials
-    info = {
-        "type": "service_account",
-        "client_email": st.secrets["gcp_service_account"]["client_email"],
-        "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
-        # The private_key must be handled carefully: it's stored in Streamlit secrets 
-        # as a multi-line string with escaped newlines.
-        "private_key": st.secrets["gcp_service_account"]["private_key"].replace('\\n', '\n'),
-        "token_uri": "https://oauth2.googleapis.com/token"
-    }
-    
-    # 2. Configure PyDrive2 to use the JSON content directly
-    gauth = GoogleAuth()
-    
-    # Configure settings to use the JSON content
-    gauth.settings = {
-        "client_config": {
-            "service_account": {
-                "credential_file_content": json.dumps(info)
-            }
-        }
-    }
-    
-    # 3. Authenticate and return service
-    gauth.ServiceAuth()
-    return GoogleDrive(gauth)
+    """Authenticates using DWD and returns the Google Drive service object."""
+    SCOPES = [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive.metadata"
+    ]
+    # Access the service account info from Streamlit secrets
+    SERVICE_ACCOUNT_INFO = st.secrets["gcp_service_account"]
+   
+    creds = service_account.Credentials.from_service_account_info(
+        SERVICE_ACCOUNT_INFO,
+        scopes=SCOPES
+    )
+    # Apply Domain-Wide Delegation
+    delegated_creds = creds.with_subject(DELEGATED_EMAIL)
+    service = build("drive", "v3", credentials=delegated_creds)
+    return service
 
+try:
+    drive_service = get_drive_service()
+except Exception as e:
+    st.error(f"Google Drive Service Initialization Error. Check secrets/delegation: {e}")
+    st.stop() # Stop the app if Drive service fails
 
-def read_shopping_file(drive):
-    """Reads the shopping list CSV file from Drive."""
-    # 1. Find the file in the specific folder
-    file_list = drive.ListFile({
-        'q': f"'{SHOPPING_FOLDER_ID}' in parents and title = '{SHOPPING_FILE_NAME}' and trashed=false"
-    }).GetList()
-
-    if not file_list:
-        # File doesn't exist, return None
-        return None, None 
-
-    # 2. Get the content
-    file = file_list[0]
-    file_id = file['id']
-    content = file.GetContentString(encoding='utf-8')
+def get_or_create_shopping_file():
+    """Finds or creates the shopping list CSV file."""
     
-    return content, file_id
-
-def write_shopping_file(drive, content, file_id=None):
-    """Writes content to the shopping list file on Drive."""
-    if file_id:
-        # Update existing file
-        file = drive.CreateFile({'id': file_id})
+    query = f"'{SHOPPING_FOLDER_ID}' in parents and name='{SHOPPING_FILE_NAME}' and mimeType='text/csv'"
+    results = drive_service.files().list(
+        q=query,
+        fields="files(id, name)",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True
+    ).execute()
+   
+    files = results.get("files", [])
+   
+    if files:
+        # File exists
+        return files[0]["id"]
     else:
-        # Create new file
-        file = drive.CreateFile({
-            'title': SHOPPING_FILE_NAME, 
-            'parents': [{'id': SHOPPING_FOLDER_ID}],
-            'mimeType': 'text/csv'
-        })
+        # File does not exist, create it
+        file_metadata = {"name": SHOPPING_FILE_NAME, "parents": [SHOPPING_FOLDER_ID]}
+        media = MediaIoBaseUpload(io.BytesIO(b""), mimetype="text/csv")
+        file = drive_service.files().create(
+            body=file_metadata,
+            media_body=media,
+            supportsAllDrives=True
+        ).execute()
+        return file["id"]
+
+
+def read_shopping_file_content(file_id):
+    """Downloads content of the file from Drive."""
+    request = drive_service.files().get_media(fileId=file_id)
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while not done:
+        status, done = downloader.next_chunk()
+   
+    fh.seek(0)
+    return fh.read().decode("utf-8")
+
+def save_data(df, file_id):
+    """Saves the DataFrame content back to the file on Drive."""
     
-    file.SetContentString(content)
-    file.Upload()
-    return file['id']
+    # Convert DataFrame to CSV string
+    csv_string = df.to_csv(index=False)
+    
+    # Prepare content for upload
+    media = MediaIoBaseUpload(io.BytesIO(csv_string.encode("utf-8")), mimetype="text/csv")
+    
+    # Upload updated content
+    drive_service.files().update(
+        fileId=file_id,
+        media_body=media,
+        supportsAllDrives=True
+    ).execute()
 
 
 # -----------------------
@@ -107,27 +119,24 @@ def write_shopping_file(drive, content, file_id=None):
 def load_data():
     """Loads CSV from Google Drive and ensures necessary columns exist."""
     
-    # 1. Get Drive Service
-    drive = get_drive_service()
-    
-    # 2. Define expected columns
+    # 1. Define expected columns
     default_cols = ["timestamp", "item", "purchased", "category", "store"]
     
-    # 3. Read content from Drive
-    content, file_id = read_shopping_file(drive)
+    # 2. Get File ID and Content
+    file_id = get_or_create_shopping_file()
+    st.session_state['shopping_file_id'] = file_id # Store ID for later save operations
     
-    if content:
+    content = read_shopping_file_content(file_id)
+    
+    if content.strip():
         # Read the content string into a DataFrame
+        from io import StringIO
         df = pd.read_csv(StringIO(content))
-        
-        # Store the file_id in session state for later updates
-        st.session_state['shopping_file_id'] = file_id
     else:
-        # File does not exist, create a new empty DataFrame
+        # File exists but is empty, create a new empty DataFrame
         df = pd.DataFrame(columns=default_cols)
-        st.session_state['shopping_file_id'] = None # No ID yet
-
-    # 4. Post-load processing (Ensure columns and dtypes)
+        
+    # 3. Post-load processing (Ensure columns and dtypes)
     for col in default_cols:
         if col not in df.columns:
             df[col] = 'Uncategorized' if col == 'category' else ('Other' if col == 'store' else None)
@@ -136,22 +145,6 @@ def load_data():
         df["purchased"] = df["purchased"].astype(bool)
         
     return df
-
-# -----------------------
-# DATA SAVING FUNCTION
-# -----------------------
-def save_data(df):
-    """Saves the DataFrame content to Google Drive."""
-    # 1. Get Drive Service and File ID
-    drive = get_drive_service()
-    file_id = st.session_state.get('shopping_file_id')
-    
-    # 2. Convert DataFrame to CSV string
-    csv_string = df.to_csv(index=False)
-    
-    # 3. Write to Drive and update File ID
-    new_file_id = write_shopping_file(drive, csv_string, file_id)
-    st.session_state['shopping_file_id'] = new_file_id
 
 
 # -----------------------
@@ -249,7 +242,7 @@ if st.button("Add Item"):
             "store": new_store
         } 
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-        save_data(df) # UPDATED TO SAVE TO DRIVE
+        save_data(df, st.session_state['shopping_file_id']) # SAVING TO DRIVE
         st.success(f"'{new_item}' added to the list for {new_store} under '{new_category}'.")
         st.rerun()
 
@@ -279,6 +272,7 @@ for store_name, store_tab in zip(STORES, store_tabs):
         
         # Unique categories in the list
         for category, group_df in df_grouped.groupby("category"):
+            # Uses the margin fix you added earlier
             st.markdown(f"**<span style='font-size: 20px; color: #1f77b4; margin-bottom: 0px !important;'>{category}</span>**", unsafe_allow_html=True)
                        
             for idx, row in group_df.iterrows():
@@ -322,7 +316,7 @@ if toggle_id and toggle_id.isdigit():
     clicked_idx = int(toggle_id)
     if clicked_idx in df.index:
         df.loc[clicked_idx, "purchased"] = not df.loc[clicked_idx, "purchased"]
-        save_data(df) # UPDATED TO SAVE TO DRIVE
+        save_data(df, st.session_state['shopping_file_id']) # SAVING TO DRIVE
         st.query_params.clear() 
         st.rerun()
 
@@ -332,6 +326,6 @@ if delete_id and delete_id.isdigit():
     clicked_idx = int(delete_id)
     if clicked_idx in df.index:
         df = df.drop(clicked_idx)
-        save_data(df) # UPDATED TO SAVE TO DRIVE
+        save_data(df, st.session_state['shopping_file_id']) # SAVING TO DRIVE
         st.query_params.clear() 
         st.rerun()
