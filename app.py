@@ -2,22 +2,157 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
+import json # New Import for handling secrets
+from io import StringIO # New Import for handling CSV string
+
+# New Imports for Google Drive
+from pydrive2.auth import GoogleAuth
+from pydrive2.drive import GoogleDrive
 
 # -----------------------
 # CONFIG
 # -----------------------
-DATA_DIR = Path("data")
-DATA_FILE = DATA_DIR / "shopping_list.csv" 
-DATA_DIR.mkdir(exist_ok=True)
+# **REPLACE THIS WITH YOUR TARGET GOOGLE DRIVE FOLDER ID**
+SHOPPING_FOLDER_ID = "YOUR_GOOGLE_DRIVE_FOLDER_ID" 
+SHOPPING_FILE_NAME = "shopping_list.csv" # The file name on Drive
 
 # Define Categories and Stores
 CATEGORIES = ["Vegetables", "Beverages", "Meat/Dairy", "Frozen", "Dry Goods"]
-STORES = ["Costco", "Trader Joe's", "Whole Foods", "Other"] # NEW: Store Tabs
+STORES = ["Costco", "Trader Joe's", "Whole Foods", "Other"] 
 
 # -----------------------
 # PAGE SETUP
 # -----------------------
 st.set_page_config(page_title="🛒 Shopping List", layout="centered")
+
+
+# -----------------------
+# GOOGLE DRIVE FUNCTIONS
+# -----------------------
+@st.cache_resource
+def get_drive_service():
+    """Authenticates and returns the GoogleDrive service object using Streamlit Secrets."""
+    
+    # 1. Get the Service Account info from Streamlit secrets
+    # The secrets are stored under the [gcp_service_account] key in the TOML file (as seen on the screen)
+    # We must construct a dictionary containing the secret values
+    
+    # Use st.secrets to securely access the credentials
+    info = {
+        "type": "service_account",
+        "client_email": st.secrets["gcp_service_account"]["client_email"],
+        "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
+        # The private_key must be handled carefully: it's stored in Streamlit secrets 
+        # as a multi-line string with escaped newlines.
+        "private_key": st.secrets["gcp_service_account"]["private_key"].replace('\\n', '\n'),
+        "token_uri": "https://oauth2.googleapis.com/token"
+    }
+    
+    # 2. Configure PyDrive2 to use the JSON content directly
+    gauth = GoogleAuth()
+    
+    # Configure settings to use the JSON content
+    gauth.settings = {
+        "client_config": {
+            "service_account": {
+                "credential_file_content": json.dumps(info)
+            }
+        }
+    }
+    
+    # 3. Authenticate and return service
+    gauth.ServiceAuth()
+    return GoogleDrive(gauth)
+
+
+def read_shopping_file(drive):
+    """Reads the shopping list CSV file from Drive."""
+    # 1. Find the file in the specific folder
+    file_list = drive.ListFile({
+        'q': f"'{SHOPPING_FOLDER_ID}' in parents and title = '{SHOPPING_FILE_NAME}' and trashed=false"
+    }).GetList()
+
+    if not file_list:
+        # File doesn't exist, return None
+        return None, None 
+
+    # 2. Get the content
+    file = file_list[0]
+    file_id = file['id']
+    content = file.GetContentString(encoding='utf-8')
+    
+    return content, file_id
+
+def write_shopping_file(drive, content, file_id=None):
+    """Writes content to the shopping list file on Drive."""
+    if file_id:
+        # Update existing file
+        file = drive.CreateFile({'id': file_id})
+    else:
+        # Create new file
+        file = drive.CreateFile({
+            'title': SHOPPING_FILE_NAME, 
+            'parents': [{'id': SHOPPING_FOLDER_ID}],
+            'mimeType': 'text/csv'
+        })
+    
+    file.SetContentString(content)
+    file.Upload()
+    return file['id']
+
+
+# -----------------------
+# DATA LOADING FUNCTION (Google Drive Version)
+# -----------------------
+def load_data():
+    """Loads CSV from Google Drive and ensures necessary columns exist."""
+    
+    # 1. Get Drive Service
+    drive = get_drive_service()
+    
+    # 2. Define expected columns
+    default_cols = ["timestamp", "item", "purchased", "category", "store"]
+    
+    # 3. Read content from Drive
+    content, file_id = read_shopping_file(drive)
+    
+    if content:
+        # Read the content string into a DataFrame
+        df = pd.read_csv(StringIO(content))
+        
+        # Store the file_id in session state for later updates
+        st.session_state['shopping_file_id'] = file_id
+    else:
+        # File does not exist, create a new empty DataFrame
+        df = pd.DataFrame(columns=default_cols)
+        st.session_state['shopping_file_id'] = None # No ID yet
+
+    # 4. Post-load processing (Ensure columns and dtypes)
+    for col in default_cols:
+        if col not in df.columns:
+            df[col] = 'Uncategorized' if col == 'category' else ('Other' if col == 'store' else None)
+            
+    if "purchased" in df.columns:
+        df["purchased"] = df["purchased"].astype(bool)
+        
+    return df
+
+# -----------------------
+# DATA SAVING FUNCTION
+# -----------------------
+def save_data(df):
+    """Saves the DataFrame content to Google Drive."""
+    # 1. Get Drive Service and File ID
+    drive = get_drive_service()
+    file_id = st.session_state.get('shopping_file_id')
+    
+    # 2. Convert DataFrame to CSV string
+    csv_string = df.to_csv(index=False)
+    
+    # 3. Write to Drive and update File ID
+    new_file_id = write_shopping_file(drive, csv_string, file_id)
+    st.session_state['shopping_file_id'] = new_file_id
+
 
 # -----------------------
 # STYLES (Includes JavaScript for faster internal rerun)
@@ -62,32 +197,6 @@ allowing Streamlit to handle the update faster.
 </style>
 """, unsafe_allow_html=True)
 
-# -----------------------
-# DATA LOADING FUNCTION
-# -----------------------
-def load_data():
-    """Loads CSV and ensures necessary columns exist."""
-    # ADDED 'store' to default columns
-    default_cols = ["timestamp", "item", "purchased", "category", "store"] 
-    
-    if DATA_FILE.exists() and DATA_FILE.stat().st_size > 0:
-        try:
-            df = pd.read_csv(DATA_FILE)
-            # Ensure new columns exist for older files
-            for col in default_cols:
-                if col not in df.columns:
-                    df[col] = 'Uncategorized' if col == 'category' else ('Other' if col == 'store' else None)
-        except pd.errors.EmptyDataError:
-            df = pd.DataFrame(columns=default_cols)
-    else:
-        df = pd.DataFrame(columns=default_cols)
-    
-    # Ensure proper dtypes
-    if "purchased" in df.columns:
-        df["purchased"] = df["purchased"].astype(bool)
-        
-    return df
-
 
 # -----------------------
 # APP START
@@ -102,7 +211,7 @@ df = load_data()
 # =====================================================
 st.subheader("Add an Item")
 
-# --- Category Selection ---
+# --- Store Selection ---
 new_store = st.selectbox(
     "Select Store",
     STORES,
@@ -110,6 +219,7 @@ new_store = st.selectbox(
     placeholder="Choose a store..."
 )
 
+# --- Category Selection ---
 new_category = st.selectbox(
     "Select Category", 
     CATEGORIES,
@@ -136,10 +246,10 @@ if st.button("Add Item"):
             "item": new_item, 
             "purchased": False, 
             "category": new_category,
-            "store": new_store # NEW: Store column saved
+            "store": new_store
         } 
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-        df.to_csv(DATA_FILE, index=False)
+        save_data(df) # UPDATED TO SAVE TO DRIVE
         st.success(f"'{new_item}' added to the list for {new_store} under '{new_category}'.")
         st.rerun()
 
@@ -162,19 +272,7 @@ for store_name, store_tab in zip(STORES, store_tabs):
         
         if df_store.empty:
             st.info(f"The list for **{store_name}** is empty. Add items above!")
-            continue # Skip to the next store if the list is empty
-
-        # ----------------------------------------------------
-        # CORE LOGIC: Handle clicks from query parameters (FAST RERUN)
-        # ----------------------------------------------------
-        # NOTE: This entire block runs only once for the whole app, but we need
-        # to process the clicks based on the index (idx) which is unique.
-        
-        query_params = st.query_params
-        
-        # Check for toggle click (must be outside the loop or handled carefully)
-        # We will handle the core logic once outside the loop for simplicity and efficiency
-        # However, for display, we proceed with the inner loop.
+            continue
 
         # Group and Sort Items: Group by category, then sort by purchased status within each group
         df_grouped = df_store.sort_values(by=["category", "purchased"])
@@ -192,11 +290,9 @@ for store_name, store_tab in zip(STORES, store_tabs):
                 status_style = "color: #888;" if purchased else "color: #000;"
                 
                 # 2. Link for the status emoji (to toggle purchase)
-                # ADDED target="_self"
                 toggle_link = f"<a href='?toggle={idx}' target='_self' style='text-decoration: none; font-size: 18px; flex-shrink: 0; margin-right: 10px; {status_style}'>{status_emoji}</a>"
                 
                 # 3. Link for the delete emoji (to delete the item)
-                # ADDED target="_self"
                 delete_link = f"<a href='?delete={idx}' target='_self' style='text-decoration: none; font-size: 18px; flex-shrink: 0; color: #f00;'>🗑️</a>"
 
                 # 4. Item Name display (no link)
@@ -226,7 +322,7 @@ if toggle_id and toggle_id.isdigit():
     clicked_idx = int(toggle_id)
     if clicked_idx in df.index:
         df.loc[clicked_idx, "purchased"] = not df.loc[clicked_idx, "purchased"]
-        df.to_csv(DATA_FILE, index=False)
+        save_data(df) # UPDATED TO SAVE TO DRIVE
         st.query_params.clear() 
         st.rerun()
 
@@ -236,6 +332,6 @@ if delete_id and delete_id.isdigit():
     clicked_idx = int(delete_id)
     if clicked_idx in df.index:
         df = df.drop(clicked_idx)
-        df.to_csv(DATA_FILE, index=False)
+        save_data(df) # UPDATED TO SAVE TO DRIVE
         st.query_params.clear() 
         st.rerun()
