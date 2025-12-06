@@ -1,2 +1,6 @@
-streamlit>=1.24.0
+streamlit==1.24.0 # Keeping the version you currently have
 pandas
+# Dependencies for Google Drive API and Delegation
+google-api-python-client
+google-auth
+google-auth-oauthlib
