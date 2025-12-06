@@ -1,21 +1,19 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import io # New Import for handling file I/O
-import json # New Import for handling secrets
+import json
+from io import StringIO
 
-# New Imports for Google Drive using googleapiclient
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
-from google.oauth2 import service_account
+# NEW Imports for Google Sheets/Gspread
+import gspread
+from gspread_dataframe import set_with_dataframe, get_dataframe
 
 # -----------------------
 # CONFIG
 # -----------------------
-# NOTE: Using the same FOLDER_ID and DELEGATED_EMAIL as the journal app
-SHOPPING_FOLDER_ID = "0AOJV_s4TPqDcUk9PVA" 
-SHOPPING_FILE_NAME = "shopping_list.csv" # The file name on Drive
-DELEGATED_EMAIL = "stefan@zeitadvisory.com"
+# NOTE: We only need the file name now, as gspread uses the name to find the sheet
+SHOPPING_FILE_NAME = "shopping_list_data" # Using a sheet name instead of a file/CSV name
+# We no longer need FOLDER_ID or DELEGATED_EMAIL for gspread service account access.
 
 # Define Categories and Stores
 CATEGORIES = ["Vegetables", "Beverages", "Meat/Dairy", "Frozen", "Dry Goods"]
@@ -28,115 +26,65 @@ st.set_page_config(page_title="🛒 Shopping List", layout="centered")
 
 
 # ----------------------------------------------------------------------------------
-# GOOGLE DRIVE SERVICE FUNCTIONS (Matching Journal App's Delegation Logic)
+# GOOGLE SPREADSHEETS FUNCTIONS (Using Gspread)
 # ----------------------------------------------------------------------------------
 @st.cache_resource
-def get_drive_service():
-    """Authenticates using DWD and returns the Google Drive service object."""
-    SCOPES = [
-        "https://www.googleapis.com/auth/drive",
-        "https://www.googleapis.com/auth/drive.file",
-        "https://www.googleapis.com/auth/drive.metadata"
-    ]
-    # Access the service account info from Streamlit secrets
-    SERVICE_ACCOUNT_INFO = st.secrets["gcp_service_account"]
-   
-    creds = service_account.Credentials.from_service_account_info(
-        SERVICE_ACCOUNT_INFO,
-        scopes=SCOPES
-    )
-    # Apply Domain-Wide Delegation
-    delegated_creds = creds.with_subject(DELEGATED_EMAIL)
-    service = build("drive", "v3", credentials=delegated_creds)
-    return service
-
-try:
-    drive_service = get_drive_service()
-except Exception as e:
-    st.error(f"Google Drive Service Initialization Error. Check secrets/delegation: {e}")
-    st.stop() # Stop the app if Drive service fails
-
-def get_or_create_shopping_file():
-    """Finds or creates the shopping list CSV file."""
+def get_gspread_client():
+    """Authenticates using Service Account JSON from Streamlit Secrets."""
     
-    query = f"'{SHOPPING_FOLDER_ID}' in parents and name='{SHOPPING_FILE_NAME}' and mimeType='text/csv'"
-    results = drive_service.files().list(
-        q=query,
-        fields="files(id, name)",
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True
-    ).execute()
-   
-    files = results.get("files", [])
-   
-    if files:
-        # File exists
-        return files[0]["id"]
-    else:
-        # File does not exist, create it
-        file_metadata = {"name": SHOPPING_FILE_NAME, "parents": [SHOPPING_FOLDER_ID]}
-        media = MediaIoBaseUpload(io.BytesIO(b""), mimetype="text/csv")
-        file = drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            supportsAllDrives=True
-        ).execute()
-        return file["id"]
-
-
-def read_shopping_file_content(file_id):
-    """Downloads content of the file from Drive."""
-    request = drive_service.files().get_media(fileId=file_id)
-    fh = io.BytesIO()
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while not done:
-        status, done = downloader.next_chunk()
-   
-    fh.seek(0)
-    return fh.read().decode("utf-8")
-
-def save_data(df, file_id):
-    """Saves the DataFrame content back to the file on Drive."""
+    # 1. Get the Service Account info from Streamlit secrets
+    # Uses the service account info you already configured
+    info = st.secrets["gcp_service_account"]
     
-    # Convert DataFrame to CSV string
-    csv_string = df.to_csv(index=False)
+    # 2. Authenticate and return the gspread client
+    client = gspread.service_account_from_dict(info)
+    return client
+
+def get_or_create_worksheet(client):
+    """Opens the shopping list sheet or creates a new one."""
     
-    # Prepare content for upload
-    media = MediaIoBaseUpload(io.BytesIO(csv_string.encode("utf-8")), mimetype="text/csv")
-    
-    # Upload updated content
-    drive_service.files().update(
-        fileId=file_id,
-        media_body=media,
-        supportsAllDrives=True
-    ).execute()
+    try:
+        # Try to open the sheet by its exact name
+        spreadsheet = client.open(SHOPPING_FILE_NAME)
+        # We will use the first worksheet (default)
+        worksheet = spreadsheet.sheet1
+        
+    except gspread.SpreadsheetNotFound:
+        # Sheet does not exist, create it
+        spreadsheet = client.create(SHOPPING_FILE_NAME)
+        # NOTE: You will need to manually 'share' this new sheet with the service account email 
+        # (client_email from your secrets) the first time it is created.
+        worksheet = spreadsheet.sheet1
+        
+    return worksheet
 
 
-# -----------------------
-# DATA LOADING FUNCTION (Google Drive Version)
-# -----------------------
 def load_data():
-    """Loads CSV from Google Drive and ensures necessary columns exist."""
+    """Loads data from Google Sheet and ensures necessary columns exist."""
     
-    # 1. Define expected columns
+    # 1. Get Gspread Client and Worksheet
+    client = get_gspread_client()
+    worksheet = get_or_create_worksheet(client)
+    
+    # 2. Define expected columns
     default_cols = ["timestamp", "item", "purchased", "category", "store"]
     
-    # 2. Get File ID and Content
-    file_id = get_or_create_shopping_file()
-    st.session_state['shopping_file_id'] = file_id # Store ID for later save operations
-    
-    content = read_shopping_file_content(file_id)
-    
-    if content.strip():
-        # Read the content string into a DataFrame
-        from io import StringIO
-        df = pd.read_csv(StringIO(content))
-    else:
-        # File exists but is empty, create a new empty DataFrame
+    # 3. Read content from the sheet using gspread-dataframe
+    try:
+        df = get_dataframe(worksheet, evaluate_formulas=True, header=1)
+        
+        # If the sheet is completely empty (no data or header), df might be empty/non-existent
+        if df.empty or 'item' not in df.columns:
+            df = pd.DataFrame(columns=default_cols)
+            # Create a header row on the sheet if it was empty
+            if worksheet.row_count < 1:
+                worksheet.append_row(default_cols)
+            
+    except Exception:
+        # Handle errors during read (e.g., sheet entirely empty)
         df = pd.DataFrame(columns=default_cols)
         
-    # 3. Post-load processing (Ensure columns and dtypes)
+    # 4. Post-load processing (Ensure columns and dtypes)
     for col in default_cols:
         if col not in df.columns:
             df[col] = 'Uncategorized' if col == 'category' else ('Other' if col == 'store' else None)
@@ -144,7 +92,18 @@ def load_data():
     if "purchased" in df.columns:
         df["purchased"] = df["purchased"].astype(bool)
         
+    # Store the worksheet object in session state for saving
+    st.session_state['worksheet'] = worksheet
+    
     return df
+
+def save_data(df):
+    """Saves the DataFrame content back to Google Sheet."""
+    
+    worksheet = st.session_state['worksheet']
+    
+    # Use gspread-dataframe to write the entire dataframe back to the sheet
+    set_with_dataframe(worksheet, df, include_index=False, row=1, col=1)
 
 
 # -----------------------
@@ -197,7 +156,8 @@ allowing Streamlit to handle the update faster.
 
 st.markdown(f"<h1>🛒 Shopping List</h1>", unsafe_allow_html=True)
 
-df = load_data()
+# Load data uses the new Gspread function
+df = load_data() 
 
 # =====================================================
 # ADD ITEM FORM (Outside of tabs so it's always visible)
@@ -242,7 +202,7 @@ if st.button("Add Item"):
             "store": new_store
         } 
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-        save_data(df, st.session_state['shopping_file_id']) # SAVING TO DRIVE
+        save_data(df) # UPDATED TO SAVE VIA GSPREAD
         st.success(f"'{new_item}' added to the list for {new_store} under '{new_category}'.")
         st.rerun()
 
@@ -316,7 +276,7 @@ if toggle_id and toggle_id.isdigit():
     clicked_idx = int(toggle_id)
     if clicked_idx in df.index:
         df.loc[clicked_idx, "purchased"] = not df.loc[clicked_idx, "purchased"]
-        save_data(df, st.session_state['shopping_file_id']) # SAVING TO DRIVE
+        save_data(df) # SAVING VIA GSPREAD
         st.query_params.clear() 
         st.rerun()
 
@@ -326,6 +286,6 @@ if delete_id and delete_id.isdigit():
     clicked_idx = int(delete_id)
     if clicked_idx in df.index:
         df = df.drop(clicked_idx)
-        save_data(df, st.session_state['shopping_file_id']) # SAVING TO DRIVE
+        save_data(df) # SAVING VIA GSPREAD
         st.query_params.clear() 
         st.rerun()
