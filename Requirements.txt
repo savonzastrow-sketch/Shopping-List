@@ -1,6 +1,5 @@
 streamlit
 pandas
-# Dependencies for Google Drive API and Delegation
-google-api-python-client==2.108.0
-google-auth==2.23.4
-google-auth-oauthlib==1.1.0
+# Dependencies for GSpread
+gspread
+gspread-dataframe
