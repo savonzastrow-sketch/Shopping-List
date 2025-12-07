@@ -4,7 +4,8 @@ channels:
 dependencies:
   - python=3.9
   - pip
-  - streamlit
-  - pandas
-  - gspread
-  - gspread-dataframe
+  - pip:
+    - streamlit
+    - pandas
+    - gspread
+    - gspread-dataframe
