@@ -1,5 +1,11 @@
-streamlit
-pandas
-# Dependencies for GSpread
-gspread
-gspread-dataframe
+name: shopping_list_env
+channels:
+  - defaults
+dependencies:
+  - python=3.9 # Explicitly setting a stable Python version
+  - pip
+  - pip:
+    - streamlit
+    - pandas
+    - gspread
+    - gspread-dataframe
