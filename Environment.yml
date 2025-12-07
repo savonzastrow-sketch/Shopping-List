@@ -2,10 +2,9 @@ name: shopping_list_env
 channels:
   - defaults
 dependencies:
-  - python=3.9 # Explicitly setting a stable Python version
+  - python=3.9
   - pip
-  - pip:
-    - streamlit
-    - pandas
-    - gspread
-    - gspread-dataframe
+  - streamlit
+  - pandas
+  - gspread
+  - gspread-dataframe
