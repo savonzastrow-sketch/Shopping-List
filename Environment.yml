@@ -7,5 +7,6 @@ dependencies:
   - pip:
     - streamlit
     - pandas
-    - gspread
-    - gspread-dataframe
+    - google-api-python-client
+    - google-auth
+    - google-auth-oauthlib
